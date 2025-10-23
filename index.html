@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>图片对比小插件</title>
+<style>
+:root {
+  --bg:#f5f6f7;
+  --panel:#fff;
+  --muted:#6b7280;
+  --text:#0b0d12;
+  --accent:#007aff;
+  --border:#e5e7eb;
+  --shadow:0 8px 30px rgba(0,0,0,.06);
+  --gutter:16px;
+  --paneMinH:576px; /* 主对比框高度保持 576px */
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Arial;background:linear-gradient(180deg,#f8fafc,#eef2f7 40%);color:var(--text)}
+.wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)}
+header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+header h1{font-size:20px;margin:0}
+.hint{color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;transition:opacity .3s ease}
+.stageHeader{
+    display:none; 
+    justify-content:space-between;align-items:center;padding:8px 12px;margin:6px 16px 0 16px;border-radius:10px;background:#fff;border:1px solid var(--border);font-weight:600;color:#111827
+}
+.stageHeader .tag{opacity:.9}
+.uploader{padding:12px;border-radius:12px;border:1px dashed #cbd5e1;background:#f8fafc; transition: background-color 0.2s ease, outline 0.2s ease;}
+
+.uploader label{font-weight:600;display:inline-block;} 
+.uploader input{width:100%;display:block;background:#fff;color:var(--text);padding:10px;border-radius:8px;border:1px solid var(--border)}
+.file-select-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px; 
+}
+.file-select-row label {
+    margin-bottom: 0; 
+    white-space: nowrap;
+}
+.file-select-row input[type=file] {
+    padding: 8px 10px;
+    margin-bottom: 0; 
+    flex-grow: 1; 
+    width: auto; 
+    display: block; 
+}
+
+.url-input-group{display:flex;align-items:center;gap:8px;}
+.url-input-group label{font-weight:normal;color:var(--muted);margin-bottom:0;white-space:nowrap;font-size:13px;}
+.url-input-group input[type=text]{background:#fff;color:var(--text);padding:6px 10px;border-radius:8px;border:1px solid var(--border);flex-grow:1;min-width: 50px;}
+.url-input-group .btn{padding:6px 10px;border-radius:8px;line-height:1.2;min-width:50px;}
+
+.stage{position:relative;aspect-ratio:16/9;min-height:var(--paneMinH);background:#000;border-top:1px solid var(--border);border-bottom:1px solid var(--border);overflow:hidden;border-radius:16px;cursor:ew-resize}
+.stage .img{position:absolute;inset:0;background-position:center;background-size:contain;background-repeat:no-repeat;pointer-events:none; transition: background-color 0.2s ease, outline 0.2s ease;}
+.stage .img.right{clip-path:inset(0 0 0 var(--cut,50%))}
+.divider{--x:50%;position:absolute;inset:0;pointer-events:none}
+.divider::before{content:"";position:absolute;left:calc(var(--x) - 1px);top:0;bottom:0;width:2px;background:#ffffff66}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px}
+.toolbar .row{display:flex;gap:8px;align-items:center;flex-wrap: wrap;} 
+.toolbar input[type=range]{width:220px}
+.pill{padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text)}
+.btn{background:#f3f4f6;color:#111827;border:1px solid var(--border);padding:8px 12px;border-radius:10px;cursor:pointer}
+.btn:hover{background:#eef2f7}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+/* 移除 footer 样式，footer 元素已移除 */
+@media(max-width:880px){.grid{grid-template-columns:1fr}}
+.gridStage{position:relative;display:none;gap:var(--gutter);border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:#f8fafc;border-radius:16px;overflow:hidden;min-height:var(--paneMinH);padding:12px}
+.gridStage.horizontal{display:grid;grid-template-columns:1fr 1fr;align-items:stretch}
+.gridStage.vertical{display:grid;grid-template-rows:1fr 1fr;align-items:stretch}
+.pane{position:relative;min-height:var(--paneMinH);background:#000;border:1px solid var(--border);border-radius:12px;overflow:hidden; transition: background-color 0.2s ease, outline 0.2s ease;}
+.badge{position:absolute;left:12px;top:12px;background:rgba(255,255,255,.9);color:#111827;border:1px solid var(--border);padding:4px 8px;border-radius:999px;font-weight:600;font-size:12px;backdrop-filter:saturate(1.2) blur(2px); z-index: 10;}
+.inner{position:absolute;inset:0;transform-origin:0 0}
+.inner img{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;-webkit-user-drag:none;user-select:none}
+
+/* --- 全屏模式 FIX --- */
+#card:fullscreen {
+  background:#000;
+  width:100vw;
+  height:100vh;
+  overflow:hidden;
+  border-radius:0;
+  padding: 0; 
+  border: none; 
+  box-shadow: none;
+  display: flex; 
+  flex-direction: column;
+}
+#card:fullscreen .grid {
+  display:none !important;
+}
+#card:fullscreen header {
+  display: none !important;
+}
+#card:fullscreen .stageHeader {
+  display: none !important;
+}
+#card:fullscreen .stage,
+#card:fullscreen .gridStage {
+  aspect-ratio:auto !important;
+  min-height: 0 !important; /* 移除固定高度 */
+  height: auto !important; /* 移除固定高度 */
+  flex-grow: 1; /* 占据剩余空间 */
+  border-radius:0;
+  margin:0;
+  border-top: none; 
+  border-bottom: none;
+}
+#card:fullscreen .inner img { object-fit:contain; }
+#card:fullscreen .toolbar {
+  background:rgba(0,0,0,0.4);
+  color:#fff;
+  z-index:20;
+  position:relative;
+}
+/* 移除全屏 footer 样式 */
+
+#card:fullscreen .btn {
+  background:rgba(255,255,255,0.15);
+  color:#fff;
+  border-color:rgba(255,255,255,0.3);
+}
+#card:fullscreen .btn:hover {
+  background:rgba(255,255,255,0.3);
+}
+
+.stage .badge {
+    display: block; 
+    position: absolute;
+    z-index: 10;
+}
+
+#drop-overlay-left, #drop-overlay-right {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 50vw;
+    z-index: 9998;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    background: rgba(0, 122, 255, 0.2);
+    border: 3px dashed #fff;
+    box-sizing: border-box;
+}
+#drop-overlay-left {
+    left: 0;
+    border-right-width: 1.5px;
+}
+#drop-overlay-right {
+    right: 0;
+    border-left-width: 1.5px;
+}
+body.drag-over-active #drop-overlay-left,
+body.drag-over-active #drop-overlay-right {
+    opacity: 1;
+}
+
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="card" id="card">
+    <div style="padding:16px 16px 0">
+      <header>
+        <h1 id="headerTitle">图片对比小插件</h1>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button class="btn" id="langToggle">EN</button>
+            <div class="hint" id="headerHint">支持 JPG / PNG / WebP / GIF（首帧） · 悬停滑动对比 · 并排模式</div>
+        </div>
+      </header>
+      <div class="grid">
+        <div class="uploader">
+          <div class="file-select-row">
+            <label id="leftLabel">左边：原图</label>
+            <input id="leftFile" type="file" accept="image/*" />
+          </div>
+          <div class="url-input-group">
+            <label id="leftUrlLabel">或从网络链接加载：</label>
+            <input id="leftUrlInput" type="text" placeholder="https://..." />
+            <button class="btn" id="leftUrlLoadBtn" type="button">加载</button>
+          </div>
+        </div>
+        <div class="uploader">
+          <div class="file-select-row">
+            <label id="rightLabel">右边：修改后</label>
+            <input id="rightFile" type="file" accept="image/*" />
+          </div>
+          <div class="url-input-group">
+            <label id="rightUrlLabel">或从网络链接加载：</label>
+            <input id="rightUrlInput" type="text" placeholder="https://..." />
+            <button class="btn" id="rightUrlLoadBtn" type="button">加载</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stageHeader"><span class="tag" id="stageTagLeft">左边：原图</span><span class="tag" id="stageTagRight">右边：修改后</span></div>
+    
+    <div class="stage" id="stage" aria-label="图片对比舞台">
+      <div class="img left"><span class="badge" id="badgeLeft">原图</span><div class="inner" id="innerLeft"></div></div>
+      <div class="img right" id="imgRight"><div class="inner" id="innerRight"></div></div>
+      <span class="badge" id="badgeRight" style="left: auto; right: 12px;">修改后</span>
+      <div class="divider" id="divider"></div>
+    </div>
+
+    <div class="gridStage" id="gridStage">
+      <div class="pane" id="paneA"><span class="badge" id="badgeA">原图</span><div class="inner" id="innerA"></div></div>
+      <div class="pane" id="paneB"><span class="badge" id="badgeB">修改后</span><div class="inner" id="innerB"></div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="row">
+        <label class="pill" id="zoomLabelContainer" style="display: inline-flex; align-items: center;">
+            <span id="zoomLabel">缩放：</span>
+            <input type="number" id="zoomInput" min="20" max="800" step="10" style="width: 50px; border:none; background: transparent; padding: 0 4px; font-weight: bold; color: var(--text);" disabled>
+            <span>%</span>
+        </label>
+        <button class="btn" id="zoom1to1" disabled>1:1</button>
+        <button class="btn" id="reset" disabled>适应窗口</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="toggleView" disabled>切换到并排</button>
+        <button class="btn" id="sizeDown" id="btnSizeDown">尺寸 -</button>
+        <button class="btn" id="sizeUp" id="btnSizeUp">尺寸 +</button>
+        <button class="btn" id="fsBtn">进入全屏</button>
+        <button class="btn" id="swap" disabled>左右互换</button>
+        <label class="pill"><input type="checkbox" id="cover"> <span id="coverLabel">填满（cover）</span></label>
+      </div>
+    </div>
+
+    </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+    // --- (START) 全局拖拽处理 ---
+    var dropOverlayLeft = document.createElement('div');
+    dropOverlayLeft.id = 'drop-overlay-left';
+    var dropOverlayRight = document.createElement('div');
+    dropOverlayRight.id = 'drop-overlay-right';
+    document.body.appendChild(dropOverlayLeft);
+    document.body.appendChild(dropOverlayRight);
+    var dragCounter = 0; 
+    window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) {
+            document.body.classList.add('drag-over-active');
+        }
+    }, false);
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    }, false);
+    window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) {
+            document.body.classList.remove('drag-over-active');
+        }
+    }, false);
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0; 
+        document.body.classList.remove('drag-over-active'); 
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                var side = (e.clientX < window.innerWidth / 2) ? 'left' : 'right';
+                loadSource(file, side);
+                if (side === 'left') {
+                    if(leftFile) leftFile.value = '';
+                    if(leftUrlInput) leftUrlInput.value = '';
+                } else {
+                    if(rightFile) rightFile.value = '';
+                    if(rightUrlInput) rightUrlInput.value = '';
+                }
+            } else {
+                alert(currentLang === 'zh' ? '请拖放一个图片文件。' : 'Please drop an image file.');
+            }
+        }
+    }, false);
+    // --- (END) 全局拖拽处理 ---
+
+
+function $(id){return document.getElementById(id);}
+function childImg(n){return n && n.querySelector ? n.querySelector('img') : null;}
+function clamp(v,min,max){return v<min?min:(v>max?max:v);}
+
+var leftFile=$('leftFile'),rightFile=$('rightFile');
+var leftUrlInput=$('leftUrlInput'), rightUrlInput=$('rightUrlInput'); 
+var leftUrlLoadBtn=$('leftUrlLoadBtn'), rightUrlLoadBtn=$('rightUrlLoadBtn'); 
+
+var innerLeft=$('innerLeft'),innerRight=$('innerRight');
+var stage=$('stage'),divider=$('divider'),gridStage=$('gridStage'),innerA=$('innerA'),innerB=$('innerB');
+
+var swapBtn=$('swap'),resetBtn=$('reset'),cover=$('cover'),toggleView=$('toggleView');
+var zoomInput = $('zoomInput'), zoom1to1 = $('zoom1to1');
+
+var sizeDown=$('sizeDown'),sizeUp=$('sizeUp'),fsBtn=$('fsBtn'),card=$('card');
+var badgeLeft=$('badgeLeft'), badgeRight=$('badgeRight'), badgeA=$('badgeA'), badgeB=$('badgeB');
+var leftURL=null,rightURL=null,leftMeta=null,rightMeta=null;
+
+var scale=1,tx=0,ty=0,mode='slider',isPanning=false,panStartX=0,panStartY=0,startTx=0,startTy=0,hoverBlocked=false;
+var baseFitPercentage = 100;
+
+var langToggle=$('langToggle'),currentLang='zh';
+
+// Language data
+var lang = {
+    'zh': {
+        title: '图片对比小插件',
+        hint: '支持 JPG / PNG / WebP / GIF（首帧） · 悬停滑动对比 · 并排模式',
+        leftLabel: '左边：原图',
+        rightLabel: '右边：修改后',
+        leftUrlLabel: '或从网络链接加载：', 
+        rightUrlLabel: '或从网络链接加载：',
+        urlLoadBtn: '加载',
+        stageTagLeft: '左边：原图',
+        stageTagRight: '右边：修改后',
+        badgeLeft: '原图', 
+        badgeRight: '修改后', 
+        badgeA: '原图',
+        badgeB: '修改后',
+        zoomLabel: '缩放：',
+        zoom1to1: '1:1',
+        reset: '适应窗口', 
+        toggleView_slider: '切换到并排',
+        toggleView_grid: '返回滑块',
+        sizeDown: '尺寸 -',
+        sizeUp: '尺寸 +',
+        fsBtn_enter: '进入全屏',
+        fsBtn_exit: '退出全屏',
+        swap: '左右互换',
+        coverLabel: '填满（cover）',
+        // footer: '小技巧：滚轮缩放，Ctrl/Cmd+0 还原视图。', // 已移除
+        langBtn: 'EN'
+    },
+    'en': {
+        title: 'Image Compare Plugin (Fullscreen Optimized)',
+        hint: 'Supports JPG / PNG / WebP / GIF (First Frame) · Slider Compare · Split View',
+        leftLabel: 'Left: Original',
+        rightLabel: 'Right: Modified',
+        leftUrlLabel: 'Or load from URL:',
+        rightUrlLabel: 'Or load from URL:',
+        urlLoadBtn: 'Load',
+        stageTagLeft: 'Left: Original',
+        stageTagRight: 'Right: Modified',
+        badgeLeft: 'Original', 
+        badgeRight: 'Modified', 
+        badgeA: 'Original',
+        badgeB: 'Modified',
+        zoomLabel: 'Zoom:',
+        zoom1to1: '1:1',
+        reset: 'Fit to Window',
+        toggleView_slider: 'Switch to Split',
+        toggleView_grid: 'Return to Slider',
+        sizeDown: 'Size -',
+        sizeUp: 'Size +',
+        fsBtn_enter: 'Enter Fullscreen',
+        fsBtn_exit: 'Exit Fullscreen',
+        swap: 'Swap Sides',
+        coverLabel: 'Fill (cover)',
+        // footer: 'Tip: Use scroll wheel to zoom, Ctrl/Cmd+0 to reset view.', // 已移除
+        langBtn: '中'
+    }
+};
+
+function updateText(l) {
+    var texts = lang[l];
+    $('headerTitle').textContent = texts.title;
+    $('headerHint').textContent = texts.hint;
+    $('leftLabel').textContent = texts.leftLabel;
+    $('rightLabel').textContent = texts.rightLabel;
+    $('leftUrlLabel').textContent = texts.leftUrlLabel; 
+    $('rightUrlLabel').textContent = texts.rightUrlLabel;
+    $('leftUrlLoadBtn').textContent = texts.urlLoadBtn;
+    $('rightUrlLoadBtn').textContent = texts.urlLoadBtn;
+    $('stageTagLeft').textContent = texts.stageTagLeft;
+    $('stageTagRight').textContent = texts.stageTagRight;
+    $('badgeLeft').textContent = texts.badgeLeft; 
+    $('badgeRight').textContent = texts.badgeRight; 
+    $('badgeA').textContent = texts.badgeA;
+    $('badgeB').textContent = texts.badgeB;
+    $('zoomLabel').textContent = texts.zoomLabel;
+    $('reset').textContent = texts.reset; 
+    $('sizeDown').textContent = texts.sizeDown;
+    $('sizeUp').textContent = texts.sizeUp;
+    $('swap').textContent = texts.swap;
+    $('coverLabel').textContent = texts.coverLabel;
+    // $('footerText').textContent = texts.footer; // 已移除 footer 元素，故删除此行
+    langToggle.textContent = texts.langBtn;
+    updateToggleViewText();
+    updateFSBtn();
+}
+
+langToggle.addEventListener('click', () => {
+    currentLang = currentLang === 'zh' ? 'en' : 'zh';
+    updateText(currentLang);
+});
+
+function updateToggleViewText() {
+    toggleView.textContent = mode === 'slider' ? lang[currentLang].toggleView_slider : lang[currentLang].toggleView_grid;
+}
+
+function ready(){return !!leftURL&&!!rightURL;}
+
+function setCut(p){
+    p = parseFloat(p) || 50; 
+    p = clamp(p, 0, 100);
+    divider.style.setProperty('--x', p + '%');
+    $('imgRight').style.setProperty('--cut', p + '%');
+}
+function createImg(src){var el=document.createElement('img');el.src=src;el.draggable=false;el.decoding='async';el.style.width='100%';el.style.height='100%';el.style.transformOrigin='0 0';return el;}
+function readMeta(src,cb){var i=new Image();i.onerror=function(){alert(currentLang === 'zh' ? '无法加载图片，请检查链接是否有效且支持跨域访问。' : 'Failed to load image. Check the URL and if cross-origin access is allowed.');};i.onload=function(){cb({w:i.naturalWidth,h:i.naturalHeight});};i.src=src;} 
+function applySize(){var fit=(cover&&cover.checked)?'cover':'contain';[innerLeft,innerRight,innerA,innerB].forEach(n=>{var im=childImg(n);if(im)im.style.objectFit=fit;});}
+
+function updateBaseFitPercentage() {
+    if (!leftMeta) return; 
+    var meta = leftMeta;
+    var container = (mode === 'slider') ? stage : $('paneA');
+    if (!container) return;
+    
+    var cRect = container.getBoundingClientRect();
+    if (cRect.width === 0 || cRect.height === 0) return; 
+    
+    var wScale = cRect.width / meta.w;
+    var hScale = cRect.height / meta.h;
+    
+    var fitScale;
+    if (cover.checked) {
+        fitScale = Math.max(wScale, hScale);
+    } else {
+        fitScale = Math.min(wScale, hScale);
+    }
+    baseFitPercentage = fitScale * 100;
+}
+
+function updateZoomUI() {
+    if (!ready()) return;
+    var currentPercentage = scale * baseFitPercentage;
+    zoomInput.value = currentPercentage.toFixed(0);
+}
+
+function applyTransform(){
+    var t='translate('+tx+'px,'+ty+'px) scale('+scale+')';
+    [innerLeft,innerRight,innerA,innerB].forEach(n=>{if(n)n.style.transform=t;});
+    updateZoomUI();
+}
+function centerFit(){
+    scale=1;tx=0;ty=0;
+    applyTransform();
+    updateCursor();
+}
+
+function updateCursor(){
+    var cursor = 'default';
+    if (mode === 'slider') {
+        cursor = 'ew-resize';
+    }
+    if (scale > 1) { 
+        cursor = isPanning ? 'grabbing' : 'grab';
+    }
+    stage.style.cursor = cursor;
+    gridStage.style.cursor = cursor;
+}
+
+function wheelZoom(e,c){
+    if(!ready())return;
+    e.preventDefault();
+    var r=c.getBoundingClientRect();
+    var cx=e.clientX-r.left,cy=e.clientY-r.top;
+var prev=scale;
+    var factor=Math.exp((-e.deltaY)*0.0015);
+    var potentialScale = scale * factor; // 计算潜在的新缩放值
+
+    // 修复：如果是在缩小 (e.deltaY > 0) 且潜在值小于 1，则强制设为 1 (适应窗口)
+    if (e.deltaY > 0 && potentialScale < 1) {
+        scale = 1;
+    } else {
+        // 否则，应用硬限制 (0.2 到 8)，允许在 1 以下继续放大或缩小到 0.2
+        scale = clamp(potentialScale, 0.2, 8); 
+    }
+    
+    tx=cx-(cx-tx)*(scale/prev);
+    ty=cy-(cy-ty)*(scale/prev);
+    
+    if(scale===1){
+        tx=0;ty=0;
+    }
+    applyTransform();
+    updateCursor();
+}
+
+function attachWheel(el){if(el)el.addEventListener('wheel',e=>wheelZoom(e,el),{passive:false});}
+
+// FIX: 将滚轮事件绑定到独立的 paneA 和 paneB 
+attachWheel(stage);
+attachWheel($('paneA'));
+attachWheel($('paneB'));
+
+function toPercent(c,x){var r=c.getBoundingClientRect();var v=clamp(x-r.left,0,r.width);return (v/r.width*100);} 
+
+function bindHover(c){if(!c)return;function move(x){if(hoverBlocked||!ready()||mode!=='slider')return;setCut(toPercent(c,x));}c.addEventListener('mousemove',e=>move(e.clientX));c.addEventListener('mouseenter',e=>move(e.clientX));}
+
+function bindPan(c){if(!c)return;c.addEventListener('mousedown',e=>{
+    if(!ready()||e.button!==0||scale<=1)return;
+    isPanning=true;
+    hoverBlocked=true; 
+    panStartX=e.clientX;
+    panStartY=e.clientY;
+    startTx=tx;
+    startTy=ty;
+    c.style.cursor='grabbing';
+    e.preventDefault();
+});
+window.addEventListener('mousemove',e=>{if(!isPanning)return;tx=startTx+(e.clientX-panStartX);ty=startTy+(e.clientY-panStartY);applyTransform();});
+window.addEventListener('mouseup',()=>{if(!isPanning)return;
+    isPanning=false;
+    hoverBlocked=false; 
+    updateCursor();
+});
+}
+function updateGridMode() {
+    if (!ready() || !leftMeta) {
+        gridStage.classList.remove('horizontal');
+        gridStage.classList.add('vertical');
+        return;
+    }
+    var ar = leftMeta.w / leftMeta.h;
+    if (leftMeta.h > leftMeta.w || (ar > 0.95 && ar < 1.05)) {
+        gridStage.classList.remove('vertical');
+        gridStage.classList.add('horizontal');
+    } else {
+        gridStage.classList.remove('horizontal');
+        gridStage.classList.add('vertical');
+    }
+}
+
+function setMode(m){
+    mode=m;
+    if(mode==='slider'){
+        stage.style.display='block';
+        gridStage.style.display='none';
+    }else{
+        stage.style.display='none';
+        gridStage.style.display='grid';
+        updateGridMode();
+    }
+    updateBaseFitPercentage(); 
+    updateZoomUI(); 
+    updateToggleViewText();
+    updateCursor();
+}
+
+function loadSource(source, side) {
+    var url = null;
+    var isFile = (source instanceof File);
+    if (isFile) {
+        url = URL.createObjectURL(source);
+    } else if (typeof source === 'string' && source.match(/^https?:\/\/.+/i)) {
+        url = source; 
+    } else {
+        if (typeof source === 'string') {
+             alert(currentLang === 'zh' ? '请输入有效的 HTTP 或 HTTPS 链接。' : 'Please enter a valid HTTP or HTTPS URL.');
+        }
+        return;
+    }
+    readMeta(url,meta=>{
+        var imgEl = createImg(url);
+        if(side==='left'){
+            leftURL=url;
+            leftMeta=meta;
+            innerLeft.innerHTML='';innerLeft.appendChild(imgEl.cloneNode(true));
+            innerA.innerHTML='';innerA.appendChild(imgEl.cloneNode(true));
+        }else{
+            rightURL=url;
+            rightMeta=meta;
+            innerRight.innerHTML='';innerRight.appendChild(imgEl.cloneNode(true));
+            innerB.innerHTML='';innerB.appendChild(imgEl.cloneNode(true));
+        }
+        var ok=ready();
+        swapBtn.disabled=!ok;
+        resetBtn.disabled=!ok;
+        toggleView.disabled=!ok;
+        
+        zoomInput.disabled = !ok;
+        zoom1to1.disabled = !ok;
+
+        applySize(); 
+        updateBaseFitPercentage(); 
+        centerFit(); 
+        updateGridMode();
+    });
+}
+
+leftFile.addEventListener('change',e=>{if (e.target.files.length > 0) {loadSource(e.target.files[0], 'left');leftUrlInput.value = ''; }});
+rightFile.addEventListener('change',e=>{if (e.target.files.length > 0) {loadSource(e.target.files[0], 'right');rightUrlInput.value = '';}});
+leftUrlLoadBtn.addEventListener('click', ()=>{var url = leftUrlInput.value.trim();if (url) {loadSource(url, 'left');leftFile.value = '';}});
+rightUrlLoadBtn.addEventListener('click', ()=>{var url = rightUrlInput.value.trim();if (url) {loadSource(url, 'right');rightFile.value = '';}});
+
+resetBtn.addEventListener('click',()=>{
+    if (!ready()) return;
+    setCut(50.0);
+    centerFit();
+});
+cover.addEventListener('change',() => {
+    applySize();
+    updateBaseFitPercentage(); 
+    updateZoomUI(); 
+});
+toggleView.addEventListener('click',()=>setMode(mode==='slider'?'grid':'slider'));
+
+// FIX: 1:1 居中缩放逻辑
+zoom1to1.addEventListener('click', () => {
+    if (!ready()) return;
+    updateBaseFitPercentage(); 
+    
+    var prevScale = scale;
+    var newScale = 100 / baseFitPercentage;
+    scale = clamp(newScale, 0.2, 8); 
+
+    // 获取视口中心
+    var cRect = (mode === 'slider' ? stage : gridStage).getBoundingClientRect();
+    var cx = cRect.width / 2;
+    var cy = cRect.height / 2;
+    
+    // 调整平移量以保持中心点稳定
+    tx = cx - (cx - tx) * (scale / prevScale);
+    ty = cy - (cy - ty) * (scale / prevScale);
+
+    applyTransform();
+    updateCursor();
+});
+
+zoomInput.addEventListener('change', () => {
+    if (!ready()) return;
+    var targetPercentage = parseFloat(zoomInput.value);
+    if (isNaN(targetPercentage)) { 
+        updateZoomUI(); 
+        return; 
+    }
+    
+    targetPercentage = clamp(targetPercentage, 20, 800);
+    updateBaseFitPercentage();
+    
+    var newScale = targetPercentage / baseFitPercentage;
+    var prevScale = scale;
+    scale = clamp(newScale, 0.2, 8); 
+    
+    var cRect = (mode === 'slider' ? stage : gridStage).getBoundingClientRect();
+    var cx = cRect.width / 2;
+    var cy = cRect.height / 2;
+    
+    tx = cx - (cx - tx) * (scale / prevScale);
+    ty = cy - (cy - ty) * (scale / prevScale);
+
+    applyTransform();
+    updateCursor();
+});
+
+
+swapBtn.addEventListener('click',()=>{
+    if(!ready())return;
+    var tmpURL=leftURL;leftURL=rightURL;rightURL=tmpURL;
+    var tMeta=leftMeta;leftMeta=rightMeta;rightMeta=tMeta;
+    var aL=childImg(innerLeft),aR=childImg(innerRight);if(aL&&aR){var cloneA=aL.cloneNode(true);var cloneB=aR.cloneNode(true);innerLeft.replaceChild(cloneB,aL);innerRight.replaceChild(cloneA,aR);}
+    var gL=childImg(innerA),gR=childImg(innerB);if(gL&&gR){var cloneA=gL.cloneNode(true);var cloneB=gR.cloneNode(true);innerA.replaceChild(cloneB,gL);innerB.replaceChild(cloneA,gR);}
+    var tmpBadgeText = badgeLeft.textContent;
+    badgeLeft.textContent = badgeRight.textContent;
+    badgeRight.textContent = tmpBadgeText;
+    tmpBadgeText = badgeA.textContent;
+    badgeA.textContent = badgeB.textContent;
+    badgeB.textContent = tmpBadgeText;
+    updateGridMode();
+    updateBaseFitPercentage();
+    updateZoomUI();
+});
+
+bindHover(stage);
+bindPan(stage);
+bindPan(gridStage);
+
+function getPaneH(){var v=getComputedStyle(document.documentElement).getPropertyValue('--paneMinH').trim();var n=parseInt(v,10);return isNaN(n)?576:n;}
+function setPaneH(px){px=clamp(px,240,1200);document.documentElement.style.setProperty('--paneMinH',px+'px');}
+sizeDown.addEventListener('click',()=>setPaneH(getPaneH()-40));
+sizeUp.addEventListener('click',()=>setPaneH(getPaneH()+40));
+
+function isFS(){return !!document.fullscreenElement;}
+function updateFSBtn(){fsBtn.textContent=isFS()?lang[currentLang].fsBtn_exit:lang[currentLang].fsBtn_enter;}
+fsBtn.addEventListener('click',()=>{if(!isFS()){card.requestFullscreen().catch(()=>{});}else{document.exitFullscreen().catch(()=>{});}});
+document.addEventListener('fullscreenchange',updateFSBtn);
+
+window.addEventListener('resize', () => {
+    if (ready()) {
+        updateBaseFitPercentage();
+        updateZoomUI();
+    }
+});
+
+// Initialization
+updateText(currentLang);
+setCut(50.0);
+applySize();
+setMode('slider');
+applyTransform();
+updateFSBtn();
+updateCursor();
+updateGridMode();
+})();
+</script>
+</body>
+</html>
